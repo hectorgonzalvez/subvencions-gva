@@ -166,41 +166,15 @@ function App() {
         try {
             let all = [];
 
-            // Funció per carregar TOTS els registres d'un recurs via API datastore
-            const loadAllRecordsFromDatastore = async (resourceId, datasetTitle, year) => {
-                const PAGE = 5000;
-                let offset = 0;
-                let total = null;
-                let records = [];
-                while (true) {
-                    const url = `${PROXY}?action=datastore_search&resource_id=${resourceId}&limit=${PAGE}&offset=${offset}`;
-                    const r = await fetch(url);
-                    if (!r.ok) break;
-                    const d = await r.json();
-                    if (!d.success) break;
-                    const batch = d.result?.records || [];
-                    if (total === null) total = d.result?.total || 0;
-                    records = [...records, ...batch];
-                    offset += PAGE;
-                    if (batch.length < PAGE || offset >= total) break;
-                }
-                return records.map((r, i) => ({
-                    id: `${resourceId}_${i}`,
-                    nom: r['nombre'] || r['beneficiario'] || '—',
-                    import: parseFloat(r['importe'] || 0) || 0,
-                    any: parseInt(r['cd_ejercicio'] || year),
-                    fecha: r['fecha_concesion'] || null,
-                    tipus: r['ds_finalidad_v'] || r['ds_finalidad_c'] || '',
-                    programa: r['convocatoria'] || datasetTitle,
-                    provincia: r['ds_provincia'] || '',
-                }));
-            };
-
-            // Funció per carregar registres d'un CSV directament
+            // Funció per carregar registres d'un CSV directament (és més fiable)
             const loadAllRecordsFromCSV = async (csvUrl, datasetTitle, year) => {
                 try {
+                    console.log(`    CSV URL: ${csvUrl}`);
                     const r = await fetch(csvUrl);
-                    if (!r.ok) return [];
+                    if (!r.ok) {
+                        console.warn(`    CSV no accessible (${r.status})`);
+                        return [];
+                    }
                     const text = await r.text();
                     const lines = text.trim().split('\n');
                     if (lines.length < 2) return [];
@@ -246,75 +220,91 @@ function App() {
                 }
             };
 
-            // PRIMER: Descobrir tots els datasets disponibles
-            console.log('🔍 Buscant datasets disponibles...');
-            setLoadingYear('Descobrint datasets...');
-            
-            const allDatasets = [];
-            let page = 0;
-            while (page < 5) { // Cercar fins a 5 pàgines
-                const res = await fetch(`${PROXY}?action=package_search&q=subvencions&rows=50&start=${page*50}`);
-                const data = await res.json();
-                
-                if (!data.success || !data.result?.results?.length) break;
-                
-                allDatasets.push(...data.result.results);
-                console.log(`Pàgina ${page}: ${data.result.results.length} datasets`);
-                page++;
-            }
-            
-            console.log(`Total datasets trovats: ${allDatasets.length}`);
-            allDatasets.forEach(d => console.log(`  - ${d.id}: ${d.title}`));
-            
-            // SEGON: Filtrar només els de subvencions per any
-            const subvByYear = {};
-            allDatasets.forEach(d => {
-                // Intentar extraure l'any del títol o del camp 'anyo'
-                let year = null;
-                if (d.anyo) year = parseInt(d.anyo);
-                if (!year) {
-                    const match = d.title.match(/(\d{4})/);
-                    if (match) year = parseInt(match[1]);
+            // Funció per carregar TOTS els registres d'un recurs via API datastore (sense paginació)
+            const loadAllRecordsFromDatastore = async (resourceId, datasetTitle, year) => {
+                try {
+                    const url = `${PROXY}?action=datastore_search&resource_id=${resourceId}&limit=5000&offset=0`;
+                    const r = await fetch(url);
+                    if (!r.ok) {
+                        console.warn(`    Datastore no accessible (${r.status})`);
+                        return [];
+                    }
+                    const d = await r.json();
+                    if (!d.success) {
+                        console.warn(`    Datastore error: ${d.error?.message || 'unknown'}`);
+                        return [];
+                    }
+                    const records = d.result?.records || [];
+                    console.log(`    Datastore: ${records.length} registres`);
+                    return records.map((r, i) => ({
+                        id: `${resourceId}_${i}`,
+                        nom: r['nombre'] || r['beneficiario'] || '—',
+                        import: parseFloat(r['importe'] || 0) || 0,
+                        any: parseInt(r['cd_ejercicio'] || year),
+                        fecha: r['fecha_concesion'] || null,
+                        tipus: r['ds_finalidad_v'] || r['ds_finalidad_c'] || '',
+                        programa: r['convocatoria'] || datasetTitle,
+                        provincia: r['ds_provincia'] || '',
+                    }));
+                } catch(e) {
+                    console.warn('Error datastore:', resourceId, e);
+                    return [];
                 }
-                if (year && year >= 2022) {
-                    if (!subvByYear[year]) subvByYear[year] = [];
-                    subvByYear[year].push(d);
-                }
-            });
-            
-            console.log('Datasets per any:', Object.keys(subvByYear).map(y => `${y}: ${subvByYear[y].length}`).join(', '));
+            };
 
-            // TERCER: Carregar dades de cada any
-            for (const year of Object.keys(subvByYear).sort()) {
+            // IDs dels datasets descoberts
+            const datasetIds = [
+                { id: 'a7e6febc-4bf0-496f-865e-d99ea73ff25a', year: 2022 },
+                { id: 'c1a5a473-abad-489c-aa38-8ece75ea07e4', year: 2023 },
+                { id: 'ed90c832-1e59-4f47-a4c3-7dff835037c7', year: 2024 },
+                { id: 'c2674e32-b2bd-425e-9d14-35a74723661d', year: 2025 },
+            ];
+
+            // Carregar dades de cada any
+            for (const { id: datasetId, year } of datasetIds) {
                 setLoadingYear(String(year));
-                const datasets = subvByYear[year];
-                console.log(`\n=== ANY ${year} (${datasets.length} datasets) ===`);
-                
-                for (const dataset of datasets) {
-                    console.log(`Dataset: ${dataset.title} (${dataset.resources.length} recursos)`);
+                try {
+                    // Obtenir info del dataset
+                    const res = await fetch(`${PROXY}?action=package_show&id=${datasetId}`);
+                    const data = await res.json();
                     
+                    if (!data.success) {
+                        console.log(`Dataset ${year} no trobat`);
+                        continue;
+                    }
+                    
+                    const dataset = data.result;
+                    console.log(`\n=== ANY ${year} ===`);
+                    console.log(`Dataset: ${dataset.title} (${dataset.resources.length} recursos)`);
+
                     for (const resource of dataset.resources) {
                         if (resource.format?.toLowerCase() !== 'csv') continue;
                         
-                        console.log(`  Carregant: ${resource.name} (datastore_active: ${resource.datastore_active})`);
+                        console.log(`  Recurs: ${resource.name} (datastore_active: ${resource.datastore_active})`);
                         let records = [];
                         
-                        if (resource.datastore_active) {
-                            records = await loadAllRecordsFromDatastore(resource.id, dataset.title, year);
-                        } else if (resource.url) {
+                        // PRIORITAT: CSV directe > Datastore
+                        if (resource.url) {
                             records = await loadAllRecordsFromCSV(resource.url, dataset.title, year);
+                        }
+                        if (records.length === 0 && resource.datastore_active) {
+                            records = await loadAllRecordsFromDatastore(resource.id, dataset.title, year);
                         }
                         
                         if (records.length > 0) {
-                            console.log(`  → ${records.length} registres`);
+                            console.log(`    ✓ ${records.length} registres carregats`);
                             all = [...all, ...records];
                             setLoadingYear(`${year} (${all.length.toLocaleString()} registres)`);
+                        } else {
+                            console.log(`    ✗ No s'ha pogut carregar`);
                         }
                     }
+                } catch(e) { 
+                    console.warn('Error any', year, e); 
                 }
             }
 
-            console.log('TOTAL FINAL:', all.length);
+            console.log(`\n🎉 TOTAL FINAL: ${all.length} registres`);
             setRecords(all);
             setLoading(false);
         } catch(err) {
