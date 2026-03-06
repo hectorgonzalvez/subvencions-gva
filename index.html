@@ -70,58 +70,63 @@
             let allSubvencions = [];
             let latestUpdate = null;
 
-            for (const dataset of allDatasets) {
-                const resources = dataset.resources || [];
+            // Carregar TOTS els recursos de TOTS els datasets sense límit per any
+            const loadResource = async (resource, datasetTitle) => {
+                try {
+                    const response = await fetch(`${PROXY}?action=datastore_search&resource_id=${resource.id}&limit=5000`);
+                    if (!response.ok) return [];
+                    const data = await response.json();
+                    if (!data.success) return [];
+                    return (data.result?.records || []).map((record, idx) => ({
+                        id: `${resource.id}_${idx}`,
+                        beneficiari: record['nombre'] || record['beneficiario'] || 'Sense beneficiari',
+                        import: parseFloat(record['importe'] || 0) || 0,
+                        any: parseInt(record['cd_ejercicio'] || new Date().getFullYear()),
+                        tipus: record['ds_finalidad_v'] || record['ds_finalidad_c'] || 'General',
+                        programa: record['convocatoria'] || datasetTitle,
+                        descripcio: record['titulo_extracto_v'] || record['titulo_extracto_c'] || '',
+                        conselleria: record['ds_conselleria_v'] || record['ds_conselleria_c'] || '',
+                        sector: record['ds_sector_v'] || record['ds_sector_c'] || '',
+                        provincia: record['ds_provincia'] || '',
+                        dataset: datasetTitle
+                    }));
+                } catch (err) {
+                    console.warn('Error carregant recurs:', err);
+                    return [];
+                }
+            };
+
+            // Agrupar recursos per any i carregar-los en paral·lel
+            for (const year of years) {
+                const datasetsThisYear = allDatasets.filter(d => 
+                    d.anyo === String(year) || d.title?.includes(String(year))
+                );
                 
-                for (const resource of resources) {
-                    if (resource.datastore_active && resource.format && resource.format.toLowerCase() === 'csv') {
-                        try {
-                            const resourceId = resource.id;
-                            console.log('Carregant:', dataset.title);
-
-                            const response = await fetch(
-    `${PROXY}?action=datastore_search&resource_id=${resourceId}&limit=5000`
-);
-
-                            if (!response.ok) continue;
-
-                            const data = await response.json();
-                            if (!data.success) continue;
-
-                            const records = data.result?.records || [];
-                            
-                            const mappedRecords = records.map((record, idx) => ({
-                                id: `${resourceId}_${idx}`,
-                                beneficiari: record['nombre'] || record['beneficiario'] || 'Sense beneficiari',
-                                import: parseFloat(record['importe'] || 0) || 0,
-                                any: parseInt(record['cd_ejercicio'] || new Date().getFullYear()),
-                                tipus: record['ds_finalidad_v'] || record['ds_finalidad_c'] || 'General',
-                                programa: record['convocatoria'] || dataset.title,
-                                descripcio: record['titulo_extracto_v'] || record['titulo_extracto_c'] || '',
-                                conselleria: record['ds_conselleria_v'] || record['ds_conselleria_c'] || '',
-                                sector: record['ds_sector_v'] || record['ds_sector_c'] || '',
-                                provincia: record['ds_provincia'] || '',
-                                dataset: dataset.title
-                            }));
-
-                            allSubvencions = [...allSubvencions, ...mappedRecords];
-                            
+                // Agafar tots els recursos actius d'aquest any
+                const resourcesThisYear = [];
+                for (const dataset of datasetsThisYear) {
+                    for (const resource of (dataset.resources || [])) {
+                        if (resource.datastore_active && resource.format?.toLowerCase() === 'csv') {
+                            resourcesThisYear.push({ resource, title: dataset.title });
                             if (resource.last_modified) {
                                 const updateDate = new Date(resource.last_modified);
                                 if (!latestUpdate || updateDate > new Date(latestUpdate)) {
                                     latestUpdate = resource.last_modified;
                                 }
                             }
-
-                            if (allSubvencions.length > 50000) break;
-                        } catch (err) {
-                            console.warn('Error carregant:', err);
-                            continue;
                         }
                     }
                 }
 
-                if (allSubvencions.length > 50000) break;
+                console.log(`Any ${year}: carregant ${resourcesThisYear.length} recursos...`);
+                
+                // Carregar en paral·lel (màx 3 alhora per no saturar)
+                for (let i = 0; i < resourcesThisYear.length; i += 3) {
+                    const batch = resourcesThisYear.slice(i, i + 3);
+                    const results = await Promise.all(batch.map(({ resource, title }) => loadResource(resource, title)));
+                    results.forEach(records => { allSubvencions = [...allSubvencions, ...records]; });
+                    console.log(`Any ${year}: ${allSubvencions.length} registres acumulats`);
+                }
             }
 
             if (allSubvencions.length > 0) {
