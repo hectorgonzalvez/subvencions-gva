@@ -45,89 +45,75 @@
         setLoading(true);
         setError(null);
 
-        console.log('Buscant datasets de subvencions...');
+        console.log('Buscant subvencions recents...');
         
         const PROXY = 'https://spring-sound-0eeb.hector-gie.workers.dev';
         const currentYear = new Date().getFullYear();
-        const years = Array.from({length: currentYear - 2021}, (_, i) => 2022 + i);
+        const years = Array.from({length: currentYear - 2021}, (_, i) => currentYear - i); // més recent primer
 
         try {
-            // Cercar datasets per cada any disponible
-            let allDatasets = [];
-            for (const year of years) {
-                const searchRes = await fetch(`${PROXY}?action=package_search&q=subvencions+${year}&rows=20`);
-                const searchData = await searchRes.json();
-                const datasets = searchData.result?.results || [];
-                console.log(`Any ${year}: ${datasets.length} datasets trobats`);
-                allDatasets = [...allDatasets, ...datasets];
-            }
-
-            // Eliminar duplicats per id
-            const seen = new Set();
-            allDatasets = allDatasets.filter(d => { if (seen.has(d.id)) return false; seen.add(d.id); return true; });
-            console.log('Total datasets únics:', allDatasets.length);
-
+            // Per cada any, agafar el dataset més recent i carregar els últims 500 registres
             let allSubvencions = [];
             let latestUpdate = null;
 
-            // Carregar TOTS els recursos de TOTS els datasets sense límit per any
-            const loadResource = async (resource, datasetTitle) => {
-                try {
-                    const response = await fetch(`${PROXY}?action=datastore_search&resource_id=${resource.id}&limit=5000`);
-                    if (!response.ok) return [];
-                    const data = await response.json();
-                    if (!data.success) return [];
-                    return (data.result?.records || []).map((record, idx) => ({
-                        id: `${resource.id}_${idx}`,
-                        beneficiari: record['nombre'] || record['beneficiario'] || 'Sense beneficiari',
-                        import: parseFloat(record['importe'] || 0) || 0,
-                        any: parseInt(record['cd_ejercicio'] || new Date().getFullYear()),
-                        tipus: record['ds_finalidad_v'] || record['ds_finalidad_c'] || 'General',
-                        programa: record['convocatoria'] || datasetTitle,
-                        descripcio: record['titulo_extracto_v'] || record['titulo_extracto_c'] || '',
-                        conselleria: record['ds_conselleria_v'] || record['ds_conselleria_c'] || '',
-                        sector: record['ds_sector_v'] || record['ds_sector_c'] || '',
-                        provincia: record['ds_provincia'] || '',
-                        dataset: datasetTitle
-                    }));
-                } catch (err) {
-                    console.warn('Error carregant recurs:', err);
-                    return [];
-                }
-            };
-
-            // Agrupar recursos per any i carregar-los en paral·lel
             for (const year of years) {
-                const datasetsThisYear = allDatasets.filter(d => 
-                    d.anyo === String(year) || d.title?.includes(String(year))
-                );
-                
-                // Agafar tots els recursos actius d'aquest any
-                const resourcesThisYear = [];
-                for (const dataset of datasetsThisYear) {
-                    for (const resource of (dataset.resources || [])) {
-                        if (resource.datastore_active && resource.format?.toLowerCase() === 'csv') {
-                            resourcesThisYear.push({ resource, title: dataset.title });
-                            if (resource.last_modified) {
-                                const updateDate = new Date(resource.last_modified);
-                                if (!latestUpdate || updateDate > new Date(latestUpdate)) {
-                                    latestUpdate = resource.last_modified;
-                                }
-                            }
-                        }
+                const searchRes = await fetch(`${PROXY}?action=package_search&q=subvencions+${year}&rows=5`);
+                const searchData = await searchRes.json();
+                const datasets = searchData.result?.results || [];
+                console.log(`Any ${year}: ${datasets.length} datasets trobats`);
+
+                // Agafar el dataset més recent d'aquest any
+                const dataset = datasets.find(d => d.anyo === String(year) || d.title?.includes(String(year)));
+                if (!dataset) continue;
+
+                // Agafar l'últim recurs actiu (el més recent cronològicament)
+                const activeResources = (dataset.resources || [])
+                    .filter(r => r.datastore_active && r.format?.toLowerCase() === 'csv')
+                    .sort((a, b) => new Date(b.last_modified || 0) - new Date(a.last_modified || 0));
+
+                if (activeResources.length === 0) continue;
+
+                // Carregar els últims 500 registres del recurs més recent
+                const resource = activeResources[0];
+                console.log(`Any ${year}: carregant ${resource.name}...`);
+
+                const response = await fetch(`${PROXY}?action=datastore_search&resource_id=${resource.id}&limit=500`);
+                if (!response.ok) continue;
+                const data = await response.json();
+                if (!data.success) continue;
+
+                const records = data.result?.records || [];
+                const mapped = records.map((record, idx) => ({
+                    id: `${resource.id}_${idx}`,
+                    beneficiari: record['nombre'] || record['beneficiario'] || 'Sense beneficiari',
+                    import: parseFloat(record['importe'] || 0) || 0,
+                    fecha: record['fecha_concesion'] || null,
+                    any: parseInt(record['cd_ejercicio'] || year),
+                    tipus: record['ds_finalidad_v'] || record['ds_finalidad_c'] || 'General',
+                    programa: record['convocatoria'] || dataset.title,
+                    conselleria: record['ds_conselleria_v'] || record['ds_conselleria_c'] || '',
+                    sector: record['ds_sector_v'] || record['ds_sector_c'] || '',
+                    provincia: record['ds_provincia'] || '',
+                    dataset: dataset.title
+                }));
+
+                allSubvencions = [...allSubvencions, ...mapped];
+
+                if (resource.last_modified) {
+                    const updateDate = new Date(resource.last_modified);
+                    if (!latestUpdate || updateDate > new Date(latestUpdate)) {
+                        latestUpdate = resource.last_modified;
                     }
                 }
 
-                console.log(`Any ${year}: carregant ${resourcesThisYear.length} recursos...`);
-                
-                // Carregar en paral·lel (màx 3 alhora per no saturar)
-                for (let i = 0; i < resourcesThisYear.length; i += 3) {
-                    const batch = resourcesThisYear.slice(i, i + 3);
-                    const results = await Promise.all(batch.map(({ resource, title }) => loadResource(resource, title)));
-                    results.forEach(records => { allSubvencions = [...allSubvencions, ...records]; });
-                    console.log(`Any ${year}: ${allSubvencions.length} registres acumulats`);
-                }
+                console.log(`Any ${year}: ${records.length} registres carregats`);
             }
+
+            // Ordenar per data de concessió més recent
+            allSubvencions.sort((a, b) => {
+                if (a.fecha && b.fecha) return new Date(b.fecha) - new Date(a.fecha);
+                return b.any - a.any;
+            });
 
             if (allSubvencions.length > 0) {
                 setSubvencions(allSubvencions);
@@ -365,11 +351,11 @@
                                                     <th className="px-4 py-3 text-left">Programa</th>
                                                     <th className="px-4 py-3 text-left">Tipus</th>
                                                     <th className="px-4 py-3 text-right">Import</th>
-                                                    <th className="px-4 py-3 text-center">Any</th>
+                                                    <th className="px-4 py-3 text-center">Data</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {filtered.slice(0, 200).map((s, idx) => (
+                                                {filtered.slice(0, 20).map((s, idx) => (
                                                     <tr key={s.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                                                         <td className="px-4 py-3 font-semibold text-gray-900">{s.beneficiari}</td>
                                                         <td className="px-4 py-3 text-gray-700 text-xs max-w-xs truncate" title={s.programa}>{s.programa?.substring(0,80)}{s.programa?.length > 80 ? '...' : ''}</td>
@@ -379,7 +365,7 @@
                                                             </span>
                                                         </td>
                                                         <td className="px-4 py-3 text-right font-bold text-orange-600">{s.import >= 1000 ? `${(s.import / 1000).toFixed(1)}K€` : `${s.import.toFixed(0)}€`}</td>
-                                                        <td className="px-4 py-3 text-center text-gray-600">{s.any}</td>
+                                                        <td className="px-4 py-3 text-center text-gray-600">{s.fecha ? new Date(s.fecha).toLocaleDateString('ca-ES') : s.any}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
@@ -387,7 +373,7 @@
                                     </div>
 
                                     {filtered.length > 200 && (
-                                        <p className="text-gray-500 text-sm mt-4">Mostrant 200 de {filtered.length} resultats. Descarrega el CSV per veure-los tots.</p>
+                                        <p className="text-gray-500 text-sm mt-4">Mostrant 20 de {filtered.length} resultats. Descarrega el CSV per veure-los tots.</p>
                                     )}
                                 </div>
 
