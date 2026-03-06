@@ -3,392 +3,333 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Subvencions GVA - Explorador de dades obertes</title>
+    <title>Subvencions GVA</title>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg: #0a0e1a;
+            --surface: #111827;
+            --surface2: #1a2235;
+            --border: #1f2d45;
+            --accent: #f97316;
+            --accent2: #3b82f6;
+            --text: #f1f5f9;
+            --muted: #64748b;
+            --gold: #fbbf24;
         }
-        .animate-spin {
-            animation: spin 1s linear infinite;
+        body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        .header {
+            border-bottom: 1px solid var(--border);
+            padding: 20px 40px;
+            display: flex; align-items: center; gap: 16px;
+            background: linear-gradient(180deg, #0f1629 0%, transparent 100%);
         }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
+        .header-logo {
+            width: 36px; height: 36px; background: var(--accent);
+            border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px;
+        }
+        .header h1 { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+        .header-sub { font-size: 13px; color: var(--muted); margin-left: auto; }
+        .live-dot {
+            display: inline-block; width: 8px; height: 8px; background: #22c55e;
+            border-radius: 50%; margin-right: 6px; animation: pulse 2s infinite;
+        }
+        @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .container { max-width: 1400px; margin: 0 auto; padding: 32px 40px; }
+
+        .loading-screen {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            min-height: 60vh; gap: 20px;
+        }
+        .spinner { width: 48px; height: 48px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        .loading-year { font-family: 'Syne', sans-serif; font-size: 72px; font-weight: 800; color: var(--border); letter-spacing: -4px; }
+        .loading-text { color: var(--muted); font-size: 14px; }
+
+        .kpi-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+        .kpi-card {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+            padding: 28px; position: relative; overflow: hidden; transition: border-color 0.2s;
+        }
+        .kpi-card:hover { border-color: var(--accent); }
+        .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+        .kpi-card.orange::before { background: var(--accent); }
+        .kpi-card.blue::before { background: var(--accent2); }
+        .kpi-card.gold::before { background: var(--gold); }
+        .kpi-label { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 12px; }
+        .kpi-value { font-family: 'Syne', sans-serif; font-size: 40px; font-weight: 800; line-height: 1; letter-spacing: -2px; margin-bottom: 8px; }
+        .kpi-card.orange .kpi-value { color: var(--accent); }
+        .kpi-card.blue .kpi-value { color: var(--accent2); }
+        .kpi-card.gold .kpi-value { color: var(--gold); }
+        .kpi-sub { font-size: 12px; color: var(--muted); }
+        .kpi-icon { position: absolute; right: 24px; top: 24px; font-size: 32px; opacity: 0.12; }
+
+        .bottom-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; margin-bottom: 16px; }
+        .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px; }
+        .panel-title { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 24px; }
+        .panel-title span { color: var(--accent); }
+        .chart-wrap { position: relative; height: 280px; }
+
+        .rank-list { display: flex; flex-direction: column; gap: 8px; }
+        .rank-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--surface2); border-radius: 10px; transition: background 0.15s; }
+        .rank-item:hover { background: var(--border); }
+        .rank-num { font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 800; width: 20px; text-align: center; flex-shrink: 0; color: var(--muted); }
+        .rank-num.gold { color: var(--gold); }
+        .rank-name { flex: 1; font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .rank-bar-wrap { width: 60px; height: 3px; background: var(--border); border-radius: 2px; flex-shrink: 0; }
+        .rank-bar { height: 100%; background: var(--accent); border-radius: 2px; }
+        .rank-amount { font-family: 'Syne', sans-serif; font-size: 11px; font-weight: 700; color: var(--accent); width: 65px; text-align: right; flex-shrink: 0; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        thead tr { border-bottom: 1px solid var(--border); }
+        th { padding: 10px 14px; text-align: left; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); }
+        th.right, td.right { text-align: right; }
+        td { padding: 11px 14px; border-bottom: 1px solid #0f1525; vertical-align: middle; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: var(--surface2); }
+        .td-name { font-weight: 500; }
+        .td-prog { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+        .badge { display: inline-block; padding: 3px 8px; border-radius: 20px; font-size: 11px; background: rgba(59,130,246,0.12); color: var(--accent2); white-space: nowrap; max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
+        .amount { font-family: 'Syne', sans-serif; font-weight: 700; color: var(--accent); }
+        .year-tag { color: var(--muted); font-size: 12px; }
+        .footer { text-align: center; padding: 32px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); margin-top: 16px; }
+
+        @media (max-width: 900px) {
+            .kpi-grid, .bottom-grid { grid-template-columns: 1fr; }
+            .container { padding: 20px; }
+            .header { padding: 16px 20px; }
         }
     </style>
 </head>
-<body class="bg-gray-50">
-    <div id="root"></div>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useMemo } = React;
+const PROXY = 'https://spring-sound-0eeb.hector-gie.workers.dev';
 
-    <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+function fmt(n) {
+    if (n >= 1e9) return (n/1e9).toFixed(2) + 'B€';
+    if (n >= 1e6) return (n/1e6).toFixed(1) + 'M€';
+    if (n >= 1e3) return (n/1e3).toFixed(0) + 'K€';
+    return n.toFixed(0) + '€';
+}
 
-        function SubvencionsBrowser() {
-            const [subvencions, setSubvencions] = useState([]);
-            const [loading, setLoading] = useState(true);
-            const [error, setError] = useState(null);
-            const [lastUpdate, setLastUpdate] = useState(null);
-            const [searchText, setSearchText] = useState('');
-            const [filterTipus, setFilterTipus] = useState('');
-            const [filterAny, setFilterAny] = useState('');
-            const [minImport, setMinImport] = useState('');
-            const [maxImport, setMaxImport] = useState('');
-            const [sortBy, setSortBy] = useState('import-desc');
+function BarChart({ data }) {
+    const ref = useRef(null);
+    const chart = useRef(null);
+    useEffect(() => {
+        if (!ref.current || !data.length) return;
+        if (chart.current) chart.current.destroy();
+        chart.current = new Chart(ref.current.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: data.map(d => d.year),
+                datasets: [{ data: data.map(d => d.total),
+                    backgroundColor: data.map((d, i) => i === data.length-1 ? '#f97316' : '#1f2d45'),
+                    hoverBackgroundColor: '#f97316', borderRadius: 6, borderSkipped: false }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { backgroundColor: '#1a2235', borderColor: '#1f2d45', borderWidth: 1,
+                        titleColor: '#f1f5f9', bodyColor: '#f97316',
+                        callbacks: { label: c => ' ' + fmt(c.raw) } }
+                },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: '#64748b' }, border: { display: false } },
+                    y: { grid: { color: '#1f2d45' }, ticks: { color: '#64748b', callback: v => fmt(v) }, border: { display: false } }
+                }
+            }
+        });
+        return () => chart.current?.destroy();
+    }, [data]);
+    return <div className="chart-wrap"><canvas ref={ref} /></div>;
+}
 
-            // Cargar dades des de l'API
-            useEffect(() => {
-                const carregarDades = async () => {
-    try {
-        setLoading(true);
-        setError(null);
+function App() {
+    const [loading, setLoading] = useState(true);
+    const [loadingYear, setLoadingYear] = useState('');
+    const [records, setRecords] = useState([]);
+    const [error, setError] = useState(null);
 
-        console.log('Buscant subvencions recents...');
-        
-        const PROXY = 'https://spring-sound-0eeb.hector-gie.workers.dev';
-        const currentYear = new Date().getFullYear();
-        const years = Array.from({length: currentYear - 2021}, (_, i) => currentYear - i); // més recent primer
+    useEffect(() => { loadData(); }, []);
 
+    const loadData = async () => {
         try {
-            // Per cada any, agafar el dataset més recent i carregar els últims 500 registres
-            let allSubvencions = [];
-            let latestUpdate = null;
+            const currentYear = new Date().getFullYear();
+            const years = Array.from({ length: currentYear - 2021 }, (_, i) => 2022 + i);
+            let all = [];
 
             for (const year of years) {
-                const searchRes = await fetch(`${PROXY}?action=package_search&q=subvencions+${year}&rows=5`);
-                const searchData = await searchRes.json();
-                const datasets = searchData.result?.results || [];
-                console.log(`Any ${year}: ${datasets.length} datasets trobats`);
+                setLoadingYear(String(year));
+                try {
+                    const res = await fetch(`${PROXY}?action=package_search&q=subvencions+${year}&rows=5`);
+                    const sdata = await res.json();
+                    const dataset = (sdata.result?.results || []).find(d => d.anyo === String(year) || d.title?.includes(String(year)));
+                    if (!dataset) continue;
 
-                // Agafar el dataset més recent d'aquest any
-                const dataset = datasets.find(d => d.anyo === String(year) || d.title?.includes(String(year)));
-                if (!dataset) continue;
+                    const resources = (dataset.resources || [])
+                        .filter(r => r.datastore_active && r.format?.toLowerCase() === 'csv')
+                        .sort((a, b) => new Date(b.last_modified||0) - new Date(a.last_modified||0));
 
-                // Agafar l'últim recurs actiu (el més recent cronològicament)
-                const activeResources = (dataset.resources || [])
-                    .filter(r => r.datastore_active && r.format?.toLowerCase() === 'csv')
-                    .sort((a, b) => new Date(b.last_modified || 0) - new Date(a.last_modified || 0));
-
-                if (activeResources.length === 0) continue;
-
-                // Carregar els últims 500 registres del recurs més recent
-                const resource = activeResources[0];
-                console.log(`Any ${year}: carregant ${resource.name}...`);
-
-                const response = await fetch(`${PROXY}?action=datastore_search&resource_id=${resource.id}&limit=500`);
-                if (!response.ok) continue;
-                const data = await response.json();
-                if (!data.success) continue;
-
-                const records = data.result?.records || [];
-                const mapped = records.map((record, idx) => ({
-                    id: `${resource.id}_${idx}`,
-                    beneficiari: record['nombre'] || record['beneficiario'] || 'Sense beneficiari',
-                    import: parseFloat(record['importe'] || 0) || 0,
-                    fecha: record['fecha_concesion'] || null,
-                    any: parseInt(record['cd_ejercicio'] || year),
-                    tipus: record['ds_finalidad_v'] || record['ds_finalidad_c'] || 'General',
-                    programa: record['convocatoria'] || dataset.title,
-                    conselleria: record['ds_conselleria_v'] || record['ds_conselleria_c'] || '',
-                    sector: record['ds_sector_v'] || record['ds_sector_c'] || '',
-                    provincia: record['ds_provincia'] || '',
-                    dataset: dataset.title
-                }));
-
-                allSubvencions = [...allSubvencions, ...mapped];
-
-                if (resource.last_modified) {
-                    const updateDate = new Date(resource.last_modified);
-                    if (!latestUpdate || updateDate > new Date(latestUpdate)) {
-                        latestUpdate = resource.last_modified;
+                    for (const resource of resources) {
+                        const r2 = await fetch(`${PROXY}?action=datastore_search&resource_id=${resource.id}&limit=5000`);
+                        if (!r2.ok) continue;
+                        const d2 = await r2.json();
+                        if (!d2.success) continue;
+                        const mapped = (d2.result?.records || []).map((r, i) => ({
+                            id: `${resource.id}_${i}`,
+                            nom: r['nombre'] || r['beneficiario'] || '—',
+                            import: parseFloat(r['importe'] || 0) || 0,
+                            any: parseInt(r['cd_ejercicio'] || year),
+                            fecha: r['fecha_concesion'] || null,
+                            tipus: r['ds_finalidad_v'] || r['ds_finalidad_c'] || '',
+                            programa: r['convocatoria'] || dataset.title,
+                            provincia: r['ds_provincia'] || '',
+                        }));
+                        all = [...all, ...mapped];
                     }
-                }
-
-                console.log(`Any ${year}: ${records.length} registres carregats`);
+                } catch(e) { console.warn('Error any', year, e); }
             }
 
-            // Ordenar per data de concessió més recent
-            allSubvencions.sort((a, b) => {
-                if (a.fecha && b.fecha) return new Date(b.fecha) - new Date(a.fecha);
-                return b.any - a.any;
-            });
-
-            if (allSubvencions.length > 0) {
-                setSubvencions(allSubvencions);
-                setLastUpdate(latestUpdate);
-                console.log('Total carregat:', allSubvencions.length);
-            } else {
-                throw new Error('No data from API');
-            }
-        } catch (apiError) {
-            console.warn('API error, using demo data:', apiError);
-            
-            // Dades de prova si l'API falla
-            const demoData = [
-                { id: '1', beneficiari: 'Universitat de València', import: 150000, any: 2024, tipus: 'Investigació', programa: 'I+D+i', descripcio: 'Subvenció per a projectes de recerca', dataset: 'Demo' },
-                { id: '2', beneficiari: 'CESEFOR SL', import: 85000, any: 2024, tipus: 'Empresa', programa: 'Digitalització', descripcio: 'Ajuda per a transformació digital', dataset: 'Demo' },
-                { id: '3', beneficiari: 'Fundació per la Innovació', import: 200000, any: 2023, tipus: 'Innovació', programa: 'Ecosistema', descripcio: 'Suport a emprenedoria', dataset: 'Demo' },
-                { id: '4', beneficiari: 'Institut Tecnològic', import: 120000, any: 2023, tipus: 'Formació', programa: 'Capacitació', descripcio: 'Cursos de capacitació laboral', dataset: 'Demo' },
-                { id: '5', beneficiari: 'Cooperativa Agrícola', import: 45000, any: 2024, tipus: 'Agricultura', programa: 'Sostenibilitat', descripcio: 'Projecte agrícola sostenible', dataset: 'Demo' },
-            ];
-            
-            setSubvencions(demoData);
-            setLastUpdate(new Date().toISOString());
+            setRecords(all);
+            setLoading(false);
+        } catch(err) {
+            setError(err.message);
+            setLoading(false);
         }
-    } catch (err) {
-        console.error('Error:', err);
-        setError('Error al carregar les dades. Intenta més tard.');
-    } finally {
-        setLoading(false);
-    }
-};
-                carregarDades();
-            }, []);
+    };
 
-            // Filtrar
-            const filtered = useMemo(() => {
-                let result = subvencions.filter(s => {
-                    const matchSearch = s.beneficiari.toLowerCase().includes(searchText.toLowerCase()) || 
-                                       s.programa.toLowerCase().includes(searchText.toLowerCase());
-                    const matchTipus = !filterTipus || s.tipus === filterTipus;
-                    const matchAny = !filterAny || s.any.toString() === filterAny;
-                    const matchMin = !minImport || s.import >= parseInt(minImport);
-                    const matchMax = !maxImport || s.import <= parseInt(maxImport);
-                    
-                    return matchSearch && matchTipus && matchAny && matchMin && matchMax;
-                });
+    const stats = useMemo(() => {
+        if (!records.length) return null;
+        const totalHistoric = records.reduce((s, r) => s + r.import, 0);
 
-                result.sort((a, b) => {
-                    switch(sortBy) {
-                        case 'import-desc': return b.import - a.import;
-                        case 'import-asc': return a.import - b.import;
-                        case 'beneficiari': return a.beneficiari.localeCompare(b.beneficiari);
-                        case 'any-desc': return b.any - a.any;
-                        default: return 0;
-                    }
-                });
+        const byYear = {};
+        records.forEach(r => { byYear[r.any] = (byYear[r.any] || 0) + r.import; });
+        const currentYear = new Date().getFullYear();
+        const chartData = Array.from({ length: 8 }, (_, i) => currentYear - 7 + i)
+            .map(y => ({ year: y, total: byYear[y] || 0 }))
+            .filter(d => d.total > 0);
 
-                return result;
-            }, [searchText, filterTipus, filterAny, minImport, maxImport, sortBy, subvencions]);
+        const bestYear = chartData.reduce((b, d) => d.total > b.total ? d : b, chartData[0]);
 
-            // Estadístiques
-            const stats = useMemo(() => {
-                const totalImport = filtered.reduce((sum, s) => sum + s.import, 0);
-                const avgImport = filtered.length > 0 ? totalImport / filtered.length : 0;
-                const top3 = [...filtered].sort((a, b) => b.import - a.import).slice(0, 3);
-                
-                return { totalImport, avgImport, totalSubvencions: filtered.length, top3 };
-            }, [filtered]);
+        const byBenef = {};
+        records.forEach(r => {
+            const k = r.nom.trim().toUpperCase();
+            if (!byBenef[k]) byBenef[k] = { nom: r.nom, total: 0 };
+            byBenef[k].total += r.import;
+        });
+        const top10 = Object.values(byBenef).sort((a, b) => b.total - a.total).slice(0, 10);
 
-            const tipus = [...new Set(subvencions.map(s => s.tipus))].sort();
-            const anys = [...new Set(subvencions.map(s => s.any))].sort((a, b) => b - a);
+        const recents = [...records]
+            .sort((a, b) => a.fecha && b.fecha ? new Date(b.fecha) - new Date(a.fecha) : b.any - a.any)
+            .slice(0, 20);
 
-            const handleDownloadCSV = () => {
-                const headers = ['Beneficiari', 'Import', 'Any', 'Tipus', 'Programa'];
-                const rows = filtered.map(s => [s.beneficiari, s.import, s.any, s.tipus, s.programa]);
-                const csv = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
-                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                const link = document.createElement('a');
-                const url = URL.createObjectURL(blob);
-                link.setAttribute('href', url);
-                link.setAttribute('download', `subvencions_gva_${new Date().toISOString().split('T')[0]}.csv`);
-                link.click();
-            };
+        return { totalHistoric, totalCount: records.length, chartData, bestYear, top10, maxTop: top10[0]?.total || 1, recents };
+    }, [records]);
 
-            return (
-                <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50">
-                    {/* Header */}
-                    <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-blue-700 text-white py-12 shadow-xl">
-                        <div className="max-w-7xl mx-auto px-4">
-                            <h1 className="text-4xl font-bold mb-2">💰 Subvencions GVA</h1>
-                            <p className="text-blue-100 text-lg">Explorador integrat de dades obertes de la Generalitat Valenciana</p>
-                            {lastUpdate && <p className="text-blue-200 text-sm mt-2">Darrera actualització: {new Date(lastUpdate).toLocaleDateString('ca-ES')}</p>}
-                        </div>
+    if (loading) return (
+        <div className="loading-screen">
+            <div className="loading-year">{loadingYear || '...'}</div>
+            <div className="spinner" />
+            <div className="loading-text">Carregant dades de {loadingYear}…</div>
+        </div>
+    );
+    if (error) return <div className="loading-screen" style={{color:'#ef4444'}}>{error}</div>;
+    if (!stats) return null;
+
+    return (
+        <>
+        <div className="header">
+            <div className="header-logo">📊</div>
+            <h1>Subvencions GVA</h1>
+            <div className="header-sub"><span className="live-dot"/>Dades en viu · dadesobertes.gva.es</div>
+        </div>
+        <div className="container">
+
+            <div className="kpi-grid">
+                <div className="kpi-card orange">
+                    <div className="kpi-icon">💰</div>
+                    <div className="kpi-label">Total històric concedit</div>
+                    <div className="kpi-value">{fmt(stats.totalHistoric)}</div>
+                    <div className="kpi-sub">{stats.totalCount.toLocaleString('ca-ES')} subvencions registrades</div>
+                </div>
+                <div className="kpi-card blue">
+                    <div className="kpi-icon">📅</div>
+                    <div className="kpi-label">Any amb més inversió</div>
+                    <div className="kpi-value">{stats.bestYear?.year}</div>
+                    <div className="kpi-sub">{fmt(stats.bestYear?.total || 0)} en subvencions</div>
+                </div>
+                <div className="kpi-card gold">
+                    <div className="kpi-icon">🏆</div>
+                    <div className="kpi-label">Major beneficiari històric</div>
+                    <div className="kpi-value" style={{fontSize: stats.top10[0]?.nom.length > 14 ? '20px' : '26px', letterSpacing:'-0.5px', lineHeight:'1.2'}}>
+                        {stats.top10[0]?.nom.substring(0,35)}{stats.top10[0]?.nom.length > 35 ? '…' : ''}
                     </div>
+                    <div className="kpi-sub">{fmt(stats.top10[0]?.total || 0)} acumulats</div>
+                </div>
+            </div>
 
-                    <div className="max-w-7xl mx-auto px-4 py-8">
-                        {/* Loading */}
-                        {loading && (
-                            <div className="bg-white rounded-lg shadow-md p-12 text-center">
-                                <div className="text-4xl animate-spin mb-4">⏳</div>
-                                <p className="text-gray-600 text-lg">Carregant datasets de subvencions...</p>
-                                <p className="text-gray-500 text-sm mt-2">Pot trigar 10-30 segons</p>
+            <div className="bottom-grid">
+                <div className="panel">
+                    <div className="panel-title">📈 <span>Volum</span> per any (últims 8 anys)</div>
+                    <BarChart data={stats.chartData} />
+                </div>
+                <div className="panel">
+                    <div className="panel-title">🏅 <span>Top 10</span> beneficiaris històrics</div>
+                    <div className="rank-list">
+                        {stats.top10.map((b, i) => (
+                            <div className="rank-item" key={i}>
+                                <div className={`rank-num ${i < 3 ? 'gold' : ''}`}>{i+1}</div>
+                                <div className="rank-name" title={b.nom}>{b.nom}</div>
+                                <div className="rank-bar-wrap"><div className="rank-bar" style={{width:`${(b.total/stats.maxTop)*100}%`}}/></div>
+                                <div className="rank-amount">{fmt(b.total)}</div>
                             </div>
-                        )}
-
-                        {error && (
-                            <div className="bg-red-50 border border-red-200 rounded-lg shadow-md p-6 mb-8">
-                                <p className="text-red-800">⚠️ {error}</p>
-                            </div>
-                        )}
-
-                        {!loading && subvencions.length > 0 && (
-                            <>
-                                {/* Cards */}
-                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-                                    <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-600">
-                                        <p className="text-gray-600 text-sm font-semibold">TOTAL SUBVENCIONS</p>
-                                        <p className="text-3xl font-bold text-blue-900 mt-1">{stats.totalSubvencions.toLocaleString()}</p>
-                                    </div>
-
-                                    <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-orange-500">
-                                        <p className="text-gray-600 text-sm font-semibold">IMPORT TOTAL</p>
-                                        <p className="text-3xl font-bold text-orange-600 mt-1">{(stats.totalImport / 1000000).toFixed(1)}M€</p>
-                                    </div>
-
-                                    <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-teal-500">
-                                        <p className="text-gray-600 text-sm font-semibold">IMPORT MITJÀ</p>
-                                        <p className="text-3xl font-bold text-teal-600 mt-1">{(stats.avgImport / 1000).toFixed(0)}K€</p>
-                                    </div>
-
-                                    <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-red-500">
-                                        <p className="text-gray-600 text-sm font-semibold">TOP BENEFICIARI</p>
-                                        <p className="text-sm font-bold text-gray-800 mt-2 truncate">{stats.top3[0]?.beneficiari || 'N/A'}</p>
-                                    </div>
-                                </div>
-
-                                {/* Filtres */}
-                                <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-                                    <h2 className="text-lg font-bold text-gray-900 mb-4">🔍 Filtres avançats</h2>
-                                    
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                                        <div>
-                                            <label className="block text-sm font-semibold text-gray-700 mb-2">Cerca</label>
-                                            <input
-                                                type="text"
-                                                placeholder="Beneficiari..."
-                                                value={searchText}
-                                                onChange={(e) => setSearchText(e.target.value)}
-                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-sm font-semibold text-gray-700 mb-2">Tipus</label>
-                                            <select
-                                                value={filterTipus}
-                                                onChange={(e) => setFilterTipus(e.target.value)}
-                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                            >
-                                                <option value="">Tots ({tipus.length})</option>
-                                                {tipus.map(t => (
-                                                    <option key={t} value={t}>{t}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-sm font-semibold text-gray-700 mb-2">Any</label>
-                                            <select
-                                                value={filterAny}
-                                                onChange={(e) => setFilterAny(e.target.value)}
-                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                            >
-                                                <option value="">Tots ({anys.length})</option>
-                                                {anys.map(a => (
-                                                    <option key={a} value={a}>{a}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-sm font-semibold text-gray-700 mb-2">Import mínim (€)</label>
-                                            <input
-                                                type="number"
-                                                placeholder="0"
-                                                value={minImport}
-                                                onChange={(e) => setMinImport(e.target.value)}
-                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-sm font-semibold text-gray-700 mb-2">Import màxim (€)</label>
-                                            <input
-                                                type="number"
-                                                placeholder="Sense límit"
-                                                value={maxImport}
-                                                onChange={(e) => setMaxImport(e.target.value)}
-                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Taula */}
-                                <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <h2 className="text-lg font-bold text-gray-900">📋 Taula de subvencions ({filtered.length})</h2>
-                                        <button
-                                            onClick={handleDownloadCSV}
-                                            className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors"
-                                        >
-                                            ⬇️ Descarregar CSV
-                                        </button>
-                                    </div>
-
-                                    <div className="mb-4">
-                                        <label className="block text-sm font-semibold text-gray-700 mb-2">Ordenar per:</label>
-                                        <select
-                                            value={sortBy}
-                                            onChange={(e) => setSortBy(e.target.value)}
-                                            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        >
-                                            <option value="import-desc">Import (més alt)</option>
-                                            <option value="import-asc">Import (més baix)</option>
-                                            <option value="beneficiari">Beneficiari (A-Z)</option>
-                                            <option value="any-desc">Any (més recent)</option>
-                                        </select>
-                                    </div>
-
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-sm">
-                                            <thead className="bg-blue-900 text-white">
-                                                <tr>
-                                                    <th className="px-4 py-3 text-left">Beneficiari</th>
-                                                    <th className="px-4 py-3 text-left">Programa</th>
-                                                    <th className="px-4 py-3 text-left">Tipus</th>
-                                                    <th className="px-4 py-3 text-right">Import</th>
-                                                    <th className="px-4 py-3 text-center">Data</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {filtered.slice(0, 20).map((s, idx) => (
-                                                    <tr key={s.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                                                        <td className="px-4 py-3 font-semibold text-gray-900">{s.beneficiari}</td>
-                                                        <td className="px-4 py-3 text-gray-700 text-xs max-w-xs truncate" title={s.programa}>{s.programa?.substring(0,80)}{s.programa?.length > 80 ? '...' : ''}</td>
-                                                        <td className="px-4 py-3">
-                                                            <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
-                                                                {s.tipus?.substring(0,30)}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-4 py-3 text-right font-bold text-orange-600">{s.import >= 1000 ? `${(s.import / 1000).toFixed(1)}K€` : `${s.import.toFixed(0)}€`}</td>
-                                                        <td className="px-4 py-3 text-center text-gray-600">{s.fecha ? new Date(s.fecha).toLocaleDateString('ca-ES') : s.any}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-
-                                    {filtered.length > 200 && (
-                                        <p className="text-gray-500 text-sm mt-4">Mostrant 20 de {filtered.length} resultats. Descarrega el CSV per veure-los tots.</p>
-                                    )}
-                                </div>
-
-                                {/* Footer */}
-                                <div className="text-center text-gray-500 text-sm py-4 border-t border-gray-200">
-                                    <p>Dades en viu de dadesobertes.gva.es • Total: {subvencions.length.toLocaleString()} registres</p>
-                                </div>
-                            </>
-                        )}
+                        ))}
                     </div>
                 </div>
-            );
-        }
+            </div>
 
-        ReactDOM.createRoot(document.getElementById('root')).render(<SubvencionsBrowser />);
-    </script>
+            <div className="panel">
+                <div className="panel-title">🕐 <span>Subvencions</span> més recents</div>
+                <div style={{overflowX:'auto'}}>
+                    <table>
+                        <thead><tr>
+                            <th>Beneficiari</th>
+                            <th>Programa</th>
+                            <th>Tipus</th>
+                            <th className="right">Import</th>
+                            <th className="right">Data</th>
+                        </tr></thead>
+                        <tbody>
+                            {stats.recents.map(r => (
+                                <tr key={r.id}>
+                                    <td><div className="td-name">{r.nom}</div></td>
+                                    <td><div className="td-prog" title={r.programa}>{r.programa?.substring(0,55)}{r.programa?.length>55?'…':''}</div></td>
+                                    <td><span className="badge" title={r.tipus}>{r.tipus?.substring(0,22)||'—'}</span></td>
+                                    <td className="right"><span className="amount">{fmt(r.import)}</span></td>
+                                    <td className="right year-tag">{r.fecha ? new Date(r.fecha).toLocaleDateString('ca-ES') : r.any}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+        <div className="footer">Dades en viu de dadesobertes.gva.es · Generalitat Valenciana</div>
+        </>
+    );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
 </body>
 </html>
