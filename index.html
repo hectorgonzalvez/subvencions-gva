@@ -166,23 +166,30 @@ function App() {
         try {
             let all = [];
 
-            // Funció per carregar registres d'un CSV directament
+            // Funció per carregar registres d'un CSV directament (via proxy)
             const loadAllRecordsFromCSV = async (csvUrl, datasetTitle, year) => {
                 try {
-                    console.log(`    CSV URL: ${csvUrl.substring(0, 80)}...`);
-                    const r = await fetch(csvUrl);
+                    // Usar el proxy CORS per a la URL del CSV
+                    const proxyUrl = `${PROXY}?url=${encodeURIComponent(csvUrl)}`;
+                    console.log(`    Carregant CSV via proxy...`);
+                    const r = await fetch(proxyUrl);
                     if (!r.ok) {
                         console.warn(`    CSV no accessible (${r.status})`);
                         return [];
                     }
                     const text = await r.text();
                     const lines = text.trim().split('\n');
-                    if (lines.length < 2) return [];
+                    if (lines.length < 2) {
+                        console.warn(`    CSV buit (${lines.length} línies)`);
+                        return [];
+                    }
                     
                     // Detectar separador (coma o punt i coma)
                     const headerLine = lines[0];
                     const sep = headerLine.includes(';') ? ';' : ',';
                     const headers = headerLine.split(sep).map(h => h.trim().toLowerCase());
+                    
+                    console.log(`    Headers: ${headers.join(', ')}`);
                     
                     const records = [];
                     for (let i = 1; i < lines.length; i++) {
@@ -215,7 +222,7 @@ function App() {
                     }
                     return records;
                 } catch(e) {
-                    console.warn('Error carregant CSV:', e);
+                    console.warn('Error carregant CSV:', e.message);
                     return [];
                 }
             };
