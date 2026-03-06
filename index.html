@@ -82,14 +82,15 @@
                             
                             const mappedRecords = records.map((record, idx) => ({
                                 id: `${resourceId}_${idx}`,
-                                beneficiari: record['BENEFICIARI'] || record['Beneficiari'] || record['beneficiari'] || 'Sense beneficiari',
-                                import: parseFloat(
-                                    record['IMPORT'] || record['Import'] || record['import'] || 0
-                                ) || 0,
-                                any: parseInt(record['ANY'] || record['Any'] || record['any'] || 2024),
-                                tipus: record['TIPUS'] || record['Tipus'] || record['tipus'] || 'General',
-                                programa: record['PROGRAMA'] || record['Programa'] || record['programa'] || dataset.title,
-                                descripcio: record['DESCRIPCIO'] || record['Descripció'] || '',
+                                beneficiari: record['nombre'] || record['beneficiario'] || 'Sense beneficiari',
+                                import: parseFloat(record['importe'] || 0) || 0,
+                                any: parseInt(record['cd_ejercicio'] || new Date().getFullYear()),
+                                tipus: record['ds_finalidad_v'] || record['ds_finalidad_c'] || 'General',
+                                programa: record['convocatoria'] || dataset.title,
+                                descripcio: record['titulo_extracto_v'] || record['titulo_extracto_c'] || '',
+                                conselleria: record['ds_conselleria_v'] || record['ds_conselleria_c'] || '',
+                                sector: record['ds_sector_v'] || record['ds_sector_c'] || '',
+                                provincia: record['ds_provincia'] || '',
                                 dataset: dataset.title
                             }));
 
@@ -356,13 +357,13 @@
                                                 {filtered.slice(0, 200).map((s, idx) => (
                                                     <tr key={s.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                                                         <td className="px-4 py-3 font-semibold text-gray-900">{s.beneficiari}</td>
-                                                        <td className="px-4 py-3 text-gray-700 text-xs">{s.programa}</td>
+                                                        <td className="px-4 py-3 text-gray-700 text-xs max-w-xs truncate" title={s.programa}>{s.programa?.substring(0,80)}{s.programa?.length > 80 ? '...' : ''}</td>
                                                         <td className="px-4 py-3">
                                                             <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
-                                                                {s.tipus}
+                                                                {s.tipus?.substring(0,30)}
                                                             </span>
                                                         </td>
-                                                        <td className="px-4 py-3 text-right font-bold text-orange-600">{(s.import / 1000).toFixed(0)}K€</td>
+                                                        <td className="px-4 py-3 text-right font-bold text-orange-600">{s.import >= 1000 ? `${(s.import / 1000).toFixed(1)}K€` : `${s.import.toFixed(0)}€`}</td>
                                                         <td className="px-4 py-3 text-center text-gray-600">{s.any}</td>
                                                     </tr>
                                                 ))}
