@@ -1,11 +1,16 @@
-export default async function handler(req, res) {
+import { VercelRequest, VercelResponse } from '@vercel/node';
+
+export default async function handler(
+  req: VercelRequest,
+  res: VercelResponse
+) {
   try {
     const { action, q, rows, resource_id, limit } = req.query;
 
     let url = `https://dadesobertes.gva.es/api/3/action/${action}?`;
 
     if (action === 'package_search') {
-      url += `q=${encodeURIComponent(q || 'subvencions')}&rows=${rows || 50}`;
+      url += `q=${encodeURIComponent((q as string) || 'subvencions')}&rows=${rows || 50}`;
     } else if (action === 'datastore_search') {
       url += `resource_id=${resource_id}&limit=${limit || 5000}`;
     }
@@ -27,7 +32,7 @@ export default async function handler(req, res) {
     console.error('API Error:', error);
     return res.status(500).json({ 
       error: 'Error fetching data', 
-      details: error.message 
+      details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 }
