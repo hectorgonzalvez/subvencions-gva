@@ -47,30 +47,40 @@
 
         console.log('Buscant datasets de subvencions...');
         
-        // Intentar carregar des de l'API
-        try {
-            const searchRes = await fetch(
-    'https://spring-sound-0eeb.hector-gie.workers.dev?action=package_search&q=subvencions&rows=50'
-);
-            const searchData = await searchRes.json();
-            const datasets = searchData.result?.results || [];
+        const PROXY = 'https://spring-sound-0eeb.hector-gie.workers.dev';
+        const currentYear = new Date().getFullYear();
+        const years = Array.from({length: currentYear - 2021}, (_, i) => 2022 + i);
 
-            console.log('Datasets trobats:', datasets.length);
+        try {
+            // Cercar datasets per cada any disponible
+            let allDatasets = [];
+            for (const year of years) {
+                const searchRes = await fetch(`${PROXY}?action=package_search&q=subvencions+${year}&rows=20`);
+                const searchData = await searchRes.json();
+                const datasets = searchData.result?.results || [];
+                console.log(`Any ${year}: ${datasets.length} datasets trobats`);
+                allDatasets = [...allDatasets, ...datasets];
+            }
+
+            // Eliminar duplicats per id
+            const seen = new Set();
+            allDatasets = allDatasets.filter(d => { if (seen.has(d.id)) return false; seen.add(d.id); return true; });
+            console.log('Total datasets únics:', allDatasets.length);
 
             let allSubvencions = [];
             let latestUpdate = null;
 
-            for (const dataset of datasets) {
+            for (const dataset of allDatasets) {
                 const resources = dataset.resources || [];
                 
                 for (const resource of resources) {
-                    if (resource.format && (resource.format.toLowerCase() === 'csv' || resource.format.toLowerCase() === 'json')) {
+                    if (resource.datastore_active && resource.format && resource.format.toLowerCase() === 'csv') {
                         try {
                             const resourceId = resource.id;
                             console.log('Carregant:', dataset.title);
 
                             const response = await fetch(
-    `https://spring-sound-0eeb.hector-gie.workers.dev?action=datastore_search&resource_id=${resourceId}&limit=5000`
+    `${PROXY}?action=datastore_search&resource_id=${resourceId}&limit=5000`
 );
 
                             if (!response.ok) continue;
@@ -103,7 +113,7 @@
                                 }
                             }
 
-                            if (allSubvencions.length > 3000) break;
+                            if (allSubvencions.length > 50000) break;
                         } catch (err) {
                             console.warn('Error carregant:', err);
                             continue;
@@ -111,7 +121,7 @@
                     }
                 }
 
-                if (allSubvencions.length > 3000) break;
+                if (allSubvencions.length > 50000) break;
             }
 
             if (allSubvencions.length > 0) {
