@@ -169,7 +169,7 @@ function App() {
             // Funció per carregar registres d'un CSV directament
             const loadAllRecordsFromCSV = async (csvUrl, datasetTitle, year) => {
                 try {
-                    console.log(`    CSV URL: ${csvUrl}`);
+                    console.log(`    CSV URL: ${csvUrl.substring(0, 80)}...`);
                     const r = await fetch(csvUrl);
                     if (!r.ok) {
                         console.warn(`    CSV no accessible (${r.status})`);
@@ -270,15 +270,36 @@ function App() {
                     }
                     
                     console.log(`\n=== ANY ${year} ===`);
-                    console.log(`Dataset ID: ${dataset.id}`);
+                    console.log(`Dataset slug: ${dataset.name || dataset.id}`);
                     console.log(`Dataset: ${dataset.title} (${dataset.resources?.length || 0} recursos)`);
                     
-                    // Carregar dataset complet per ID
-                    const pkgRes = await fetch(`${PROXY}?action=package_show&id=${dataset.id}`);
+                    // Intentar carregar amb el slug (name) en lloc de UUID
+                    const datasetIdentifier = dataset.name || dataset.id;
+                    const pkgRes = await fetch(`${PROXY}?action=package_show&id=${datasetIdentifier}`);
                     const pkgData = await pkgRes.json();
                     
                     if (!pkgData.success) {
-                        console.log(`No es pot carregar dataset ${dataset.id}`);
+                        console.log(`No es pot carregar dataset amb slug ${datasetIdentifier}`);
+                        // Intentar directament amb els recursos del search result
+                        console.log(`Intentant usar recursos del search result...`);
+                        const resources = dataset.resources || [];
+                        
+                        for (const resource of resources) {
+                            if (resource.format?.toLowerCase() !== 'csv') continue;
+                            
+                            console.log(`  Recurs: ${resource.name}`);
+                            
+                            let records = [];
+                            if (resource.url) {
+                                records = await loadAllRecordsFromCSV(resource.url, dataset.title, year);
+                            }
+                            
+                            if (records.length > 0) {
+                                console.log(`    ✓ ${records.length} registres carregats`);
+                                all = [...all, ...records];
+                                setLoadingYear(`${year} (${all.length.toLocaleString()} registres)`);
+                            }
+                        }
                         continue;
                     }
                     
@@ -288,7 +309,6 @@ function App() {
                         if (resource.format?.toLowerCase() !== 'csv') continue;
                         
                         console.log(`  Recurs: ${resource.name}`);
-                        console.log(`    datastore_active: ${resource.datastore_active}`);
                         
                         let records = [];
                         
