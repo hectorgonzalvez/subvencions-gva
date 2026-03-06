@@ -158,6 +158,7 @@ function App() {
     const [loadingYear, setLoadingYear] = useState('');
     const [records, setRecords] = useState([]);
     const [error, setError] = useState(null);
+    const [search, setSearch] = useState('');
 
     useEffect(() => { loadData(); }, []);
 
@@ -167,38 +168,63 @@ function App() {
             const years = Array.from({ length: currentYear - 2021 }, (_, i) => 2022 + i);
             let all = [];
 
+            // Funció per carregar TOTS els registres d'un recurs amb paginació
+            const loadAllRecords = async (resourceId, datasetTitle, year) => {
+                const PAGE = 5000;
+                let offset = 0;
+                let total = null;
+                let records = [];
+                while (true) {
+                    const url = `${PROXY}?action=datastore_search&resource_id=${resourceId}&limit=${PAGE}&offset=${offset}`;
+                    const r = await fetch(url);
+                    if (!r.ok) break;
+                    const d = await r.json();
+                    if (!d.success) break;
+                    const batch = d.result?.records || [];
+                    if (total === null) total = d.result?.total || 0;
+                    records = [...records, ...batch];
+                    offset += PAGE;
+                    if (batch.length < PAGE || offset >= total) break;
+                }
+                return records.map((r, i) => ({
+                    id: `${resourceId}_${i}`,
+                    nom: r['nombre'] || r['beneficiario'] || '—',
+                    import: parseFloat(r['importe'] || 0) || 0,
+                    any: parseInt(r['cd_ejercicio'] || year),
+                    fecha: r['fecha_concesion'] || null,
+                    tipus: r['ds_finalidad_v'] || r['ds_finalidad_c'] || '',
+                    programa: r['convocatoria'] || datasetTitle,
+                    provincia: r['ds_provincia'] || '',
+                }));
+            };
+
             for (const year of years) {
                 setLoadingYear(String(year));
                 try {
-                    const res = await fetch(`${PROXY}?action=package_search&q=subvencions+${year}&rows=5`);
+                    // Agafar TOTS els datasets de l'any (rows=50)
+                    const res = await fetch(`${PROXY}?action=package_search&q=subvencions+${year}&rows=50`);
                     const sdata = await res.json();
-                    const dataset = (sdata.result?.results || []).find(d => d.anyo === String(year) || d.title?.includes(String(year)));
-                    if (!dataset) continue;
+                    const datasets = (sdata.result?.results || []).filter(
+                        d => d.anyo === String(year) || d.title?.includes(String(year))
+                    );
+                    console.log(`Any ${year}: ${datasets.length} datasets`);
 
-                    const resources = (dataset.resources || [])
-                        .filter(r => r.datastore_active && r.format?.toLowerCase() === 'csv')
-                        .sort((a, b) => new Date(b.last_modified||0) - new Date(a.last_modified||0));
+                    for (const dataset of datasets) {
+                        const resources = (dataset.resources || [])
+                            .filter(r => r.datastore_active && r.format?.toLowerCase() === 'csv');
 
-                    for (const resource of resources) {
-                        const r2 = await fetch(`${PROXY}?action=datastore_search&resource_id=${resource.id}&limit=5000`);
-                        if (!r2.ok) continue;
-                        const d2 = await r2.json();
-                        if (!d2.success) continue;
-                        const mapped = (d2.result?.records || []).map((r, i) => ({
-                            id: `${resource.id}_${i}`,
-                            nom: r['nombre'] || r['beneficiario'] || '—',
-                            import: parseFloat(r['importe'] || 0) || 0,
-                            any: parseInt(r['cd_ejercicio'] || year),
-                            fecha: r['fecha_concesion'] || null,
-                            tipus: r['ds_finalidad_v'] || r['ds_finalidad_c'] || '',
-                            programa: r['convocatoria'] || dataset.title,
-                            provincia: r['ds_provincia'] || '',
-                        }));
-                        all = [...all, ...mapped];
+                        for (const resource of resources) {
+                            console.log(`  Carregant: ${resource.name}`);
+                            const records = await loadAllRecords(resource.id, dataset.title, year);
+                            console.log(`  → ${records.length} registres`);
+                            all = [...all, ...records];
+                            setLoadingYear(`${year} (${all.length.toLocaleString()} registres)`);
+                        }
                     }
                 } catch(e) { console.warn('Error any', year, e); }
             }
 
+            console.log('TOTAL FINAL:', all.length);
             setRecords(all);
             setLoading(false);
         } catch(err) {
@@ -232,8 +258,17 @@ function App() {
             .sort((a, b) => a.fecha && b.fecha ? new Date(b.fecha) - new Date(a.fecha) : b.any - a.any)
             .slice(0, 20);
 
-        return { totalHistoric, totalCount: records.length, chartData, bestYear, top10, maxTop: top10[0]?.total || 1, recents };
+        return { totalHistoric, totalCount: records.length, chartData, top10, maxTop: top10[0]?.total || 1, recents };
     }, [records]);
+
+    const searchResults = useMemo(() => {
+        if (!search.trim() || search.length < 2) return [];
+        const q = search.trim().toLowerCase();
+        return records
+            .filter(r => r.nom.toLowerCase().includes(q))
+            .sort((a, b) => b.import - a.import)
+            .slice(0, 50);
+    }, [search, records]);
 
     if (loading) return (
         <div className="loading-screen">
@@ -254,6 +289,65 @@ function App() {
         </div>
         <div className="container">
 
+            {/* Cercador */}
+            <div style={{marginBottom: 24}}>
+                <div style={{position:'relative', maxWidth: 480}}>
+                    <span style={{position:'absolute', left:16, top:'50%', transform:'translateY(-50%)', fontSize:16, pointerEvents:'none'}}>🔍</span>
+                    <input
+                        type="text"
+                        placeholder="Cerca per beneficiari..."
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        style={{
+                            width:'100%', padding:'12px 16px 12px 44px',
+                            background:'#111827', border:'1px solid #1f2d45',
+                            borderRadius:12, color:'#f1f5f9', fontSize:14,
+                            fontFamily:'DM Sans, sans-serif', outline:'none',
+                            transition:'border-color 0.2s'
+                        }}
+                        onFocus={e => e.target.style.borderColor='#f97316'}
+                        onBlur={e => e.target.style.borderColor='#1f2d45'}
+                    />
+                    {search && <button onClick={() => setSearch('')} style={{
+                        position:'absolute', right:14, top:'50%', transform:'translateY(-50%)',
+                        background:'none', border:'none', color:'#64748b', cursor:'pointer', fontSize:18, lineHeight:1
+                    }}>×</button>}
+                </div>
+            </div>
+
+            {/* Resultats de cerca */}
+            {search.length >= 2 && (
+                <div className="panel" style={{marginBottom: 24}}>
+                    <div className="panel-title">🔍 <span>Resultats</span> per "{search}" ({searchResults.length}{searchResults.length === 50 ? '+' : ''})</div>
+                    {searchResults.length === 0 ? (
+                        <div style={{color:'#64748b', fontSize:14, textAlign:'center', padding:'32px 0'}}>Cap resultat trobat</div>
+                    ) : (
+                        <div style={{overflowX:'auto'}}>
+                            <table>
+                                <thead><tr>
+                                    <th>Beneficiari</th>
+                                    <th>Programa</th>
+                                    <th>Tipus</th>
+                                    <th className="right">Import</th>
+                                    <th className="right">Any</th>
+                                </tr></thead>
+                                <tbody>
+                                    {searchResults.map(r => (
+                                        <tr key={r.id}>
+                                            <td><div className="td-name">{r.nom}</div></td>
+                                            <td><div className="td-prog" title={r.programa}>{r.programa?.substring(0,55)}{r.programa?.length>55?'…':''}</div></td>
+                                            <td><span className="badge">{r.tipus?.substring(0,22)||'—'}</span></td>
+                                            <td className="right"><span className="amount">{fmt(r.import)}</span></td>
+                                            <td className="right year-tag">{r.any}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            )}
+
             <div className="kpi-grid">
                 <div className="kpi-card orange">
                     <div className="kpi-icon">💰</div>
@@ -263,9 +357,9 @@ function App() {
                 </div>
                 <div className="kpi-card blue">
                     <div className="kpi-icon">📅</div>
-                    <div className="kpi-label">Any amb més inversió</div>
-                    <div className="kpi-value">{stats.bestYear?.year}</div>
-                    <div className="kpi-sub">{fmt(stats.bestYear?.total || 0)} en subvencions</div>
+                    <div className="kpi-label">Anys de dades disponibles</div>
+                    <div className="kpi-value">{stats.chartData.length}</div>
+                    <div className="kpi-sub">De {stats.chartData[0]?.year} a {stats.chartData[stats.chartData.length-1]?.year}</div>
                 </div>
                 <div className="kpi-card gold">
                     <div className="kpi-icon">🏆</div>
