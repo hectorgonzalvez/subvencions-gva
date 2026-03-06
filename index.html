@@ -166,21 +166,35 @@ function App() {
         try {
             let all = [];
 
-            // Funció per carregar registres d'un CSV directament (via proxy)
+            // Funció per carregar registres d'un CSV directament
             const loadAllRecordsFromCSV = async (csvUrl, datasetTitle, year) => {
                 try {
-                    // Usar el proxy CORS per a la URL del CSV
-                    const proxyUrl = `${PROXY}?url=${encodeURIComponent(csvUrl)}`;
-                    console.log(`    Carregant CSV via proxy...`);
-                    const r = await fetch(proxyUrl);
-                    if (!r.ok) {
-                        console.warn(`    CSV no accessible (${r.status})`);
+                    console.log(`    CSV URL: ${csvUrl.substring(0, 100)}...`);
+                    
+                    // Intentar sense proxy primer
+                    const r = await fetch(csvUrl, { mode: 'no-cors' });
+                    let text = '';
+                    
+                    if (r.ok || r.status === 0) {
+                        text = await r.text();
+                    } else {
+                        // Si falla, intentar via proxy de Cloudflare
+                        const cloudflareProxy = `https://cors.io/?${encodeURIComponent(csvUrl)}`;
+                        console.log(`    Intentant via Cloudflare proxy...`);
+                        const r2 = await fetch(cloudflareProxy);
+                        if (r2.ok) {
+                            text = await r2.text();
+                        }
+                    }
+                    
+                    if (!text || text.length === 0) {
+                        console.warn(`    CSV buit o no accessible`);
                         return [];
                     }
-                    const text = await r.text();
+                    
                     const lines = text.trim().split('\n');
                     if (lines.length < 2) {
-                        console.warn(`    CSV buit (${lines.length} línies)`);
+                        console.warn(`    CSV només té ${lines.length} línies`);
                         return [];
                     }
                     
@@ -189,12 +203,15 @@ function App() {
                     const sep = headerLine.includes(';') ? ';' : ',';
                     const headers = headerLine.split(sep).map(h => h.trim().toLowerCase());
                     
-                    console.log(`    Headers: ${headers.join(', ')}`);
+                    console.log(`    Headers detectats: ${headers.length}`);
                     
                     const records = [];
-                    for (let i = 1; i < lines.length; i++) {
-                        const parts = lines[i].split(sep);
-                        if (parts.length !== headers.length) continue;
+                    for (let i = 1; i < Math.min(lines.length, 10000); i++) {
+                        const line = lines[i];
+                        if (!line.trim()) continue;
+                        
+                        const parts = line.split(sep);
+                        if (parts.length < 2) continue;
                         
                         const row = {};
                         headers.forEach((h, idx) => {
@@ -220,6 +237,7 @@ function App() {
                             });
                         }
                     }
+                    console.log(`    ✓ ${records.length} registres parseados`);
                     return records;
                 } catch(e) {
                     console.warn('Error carregant CSV:', e.message);
