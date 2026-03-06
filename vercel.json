@@ -1,11 +1,5 @@
 {
-  "functions": {
-    "api/subvencions.js": {
-      "runtime": "nodejs18.x"
-    }
-  },
   "rewrites": [
-    { "source": "/api/subvencions", "destination": "/api/subvencions.js" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
