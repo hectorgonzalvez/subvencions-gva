@@ -1,0 +1,6 @@
+{
+  "name": "subvencions-gva",
+  "version": "1.0.0",
+  "description": "Explorador de subvencions de la Generalitat Valenciana",
+  "private": true
+}
